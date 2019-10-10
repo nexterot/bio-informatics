@@ -1,10 +1,12 @@
 import argparse
 
+from sys import stdout
+
 STATES = (DESC, DNA) = range(2)
 
 DONE = 0
 LEFT = 1
-UP   = 2
+UP = 2
 DIAG = 3
 
 BLOSUM = (
@@ -151,10 +153,30 @@ def parse_file(file_name, num_records):
     return res
 
 
-def needleman_wunsch(a, b, g, scoring_func):
+def pprint(s, m):
+    print(s + "[")
+    for row in m:
+        print("\t", row, sep="")
+    print("]")
+
+
+def prints(d, s, file):
+    stream = file if file else stdout
+    print(d, file=stream)
+    N = 100
+    if len(s) <= N:
+        print(s, file=stream)
+        return
+    num = len(s) // N
+    for i in range(0, num):
+        print(s[i:i+N], file=stream)
+    print(s[num*N:], file=stream)
+
+
+def needleman_wunsch(a, b, g, scoring_func, output_filename):
     D = [[0] * (len(b.dna) + 1) for _ in range(len(a.dna) + 1)]
     PTR = [[0] * (len(b.dna) + 1) for _ in range(len(a.dna) + 1)]
-    D[0][0] = 1
+    D[0][0] = 0
     PTR[0][0] = DONE
     for i in range(1, len(a.dna) + 1):
         D[i][0] = i * g
@@ -162,14 +184,13 @@ def needleman_wunsch(a, b, g, scoring_func):
     for i in range(1, len(b.dna) + 1):
         D[0][i] = i * g
         PTR[0][i] = LEFT
-    # dynamic programming step
+    # динамическое программирование
     for i in range(1, len(a.dna) + 1):
         for j in range(1, len(b.dna) + 1):
             score_up = D[i-1][j] + g
-            print(D[i-1][j], g)
             score_left = D[i][j-1] + g
-            score_diag = D[i-1][j-1] + scoring_func(a.dna[i-1], a.dna[j-1])
-            print(score_up, score_left, score_diag)
+            score_diag = D[i-1][j-1] + scoring_func(a.dna[i-1], b.dna[j-1])
+            # print(score_up, score_left, score_diag)
             score_max = max(score_up, score_left, score_diag)
             D[i][j] = score_max
             if score_max == score_up:
@@ -178,28 +199,81 @@ def needleman_wunsch(a, b, g, scoring_func):
                 PTR[i][j] = LEFT
             else:
                 PTR[i][j] = DIAG
-    print("D=", D)
-    print("PTR=", PTR)
+    # pprint("D", D)
+    # pprint("PTR", PTR)
+    # обратный ход
+    count = 0
+    i = len(a.dna)
+    j = len(b.dna)
+    res_a = ['?'] * (i + j)
+    res_b = ['?'] * (i + j)
+    while i != 0 and j != 0:
+        if PTR[i][j] == DIAG:
+            res_a[count] = a.dna[i-1]
+            res_b[count] = b.dna[j-1]
+            count += 1
+            i -= 1
+            j -= 1
+        elif PTR[i][j] == LEFT:
+            res_a[count] = '-'
+            res_b[count] = b.dna[j-1]
+            count += 1
+            j -= 1
+        elif PTR[i][j] == UP:
+            res_a[count] = a.dna[i-1]
+            res_b[count] = '-'
+            count += 1
+            i -= 1
+    for k in range(0, count // 2):
+        tmp = res_a[k]
+        res_a[k] = res_a[count - 1 - k]
+        res_a[count - 1 - k] = tmp
+        tmp = res_b[k]
+        res_b[k] = res_b[count - 1 - k]
+        res_b[count - 1 - k] = tmp
+    score = D[len(a.dna)][len(b.dna)]
+    a1 = "".join(res_a).rstrip("?")
+    a2 = "".join(res_b).rstrip("?")
+    if output_filename:
+        with open(output_filename, "w") as f:
+            prints("seq1: ", a1, f)
+            prints("seq2: ", a2, f)
+            print("score:", score, file=f)
+        return
+    prints("seq1: ", a1, None)
+    prints("seq2: ", a2, None)
+    print("score:", score)
 
 
 def main():
     parser = argparse.ArgumentParser(description='NW')
     parser.add_argument('-i', metavar='file', type=str, nargs='+', help='input files')
-    parser.add_argument('-o', type=str, nargs='+', help='output file')
-    parser.add_argument('-g', type=int, nargs='+', help='gap')
+    parser.add_argument('-o', type=str, help='output file')
+    parser.add_argument('-s', type=str, help='')
+    parser.add_argument('-g', type=int, help='gap')
     args = parser.parse_args()
-    print(args)
-    scoring_func = scoring_blosum62
+    if args.g is None:
+        args.g = -2
+    # print(args)
+    scoring_func = None
+    if args.s == "blosum62":
+        scoring_func = scoring_blosum62
+    elif args.s == "dna_full":
+        scoring_func = scoring_dna_full
+    else:
+        print("invalid scoring func: prodive '-s blosum62' or '-s dna_full'")
+        return
+
     if len(args.i) == 1:
         r = parse_file(args.i[0], 2)
-        print(r)
-        needleman_wunsch(r[0], r[1], args.g[0], scoring_func)
+        # print(r)
+        needleman_wunsch(r[0], r[1], args.g, scoring_func, args.o)
     elif len(args.i) == 2:
         r = parse_file(args.i[0], 1) + parse_file(args.i[1], 1)
-        needleman_wunsch(r[0], r[1], args.g[0], scoring_func)
-        print(r)
+        # print(r)
+        needleman_wunsch(r[0], r[1], args.g, scoring_func, args.o)
     else:
-        print("Provide 1 or 2 input files")
+        print("invalid number of input files")
         return
 
 
