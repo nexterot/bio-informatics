@@ -14,7 +14,7 @@ python main.py -i in.fasta
 ### Lab 3: Hirschberg
 ```
 cd lab3
-
+python main.py -i in.fasta
 ```
 ### Lab 4: Affine
 ```
