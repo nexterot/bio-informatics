@@ -19,5 +19,5 @@ python main.py -i in.fasta
 ### Lab 4: Affine
 ```
 cd lab4
-
+python main.py -i in.fasta
 ```
